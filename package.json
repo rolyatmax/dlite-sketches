@@ -1,0 +1,24 @@
+{
+  "scripts": {
+    "start": "budo index.js --live --open"
+  },
+  "eslintConfig": {
+    "extends": [
+      "standard"
+    ]
+  },
+  "dependencies": {
+    "@deck.gl/core": "^7.1.10",
+    "@deck.gl/layers": "^7.1.10",
+    "budo": "^11.6.2",
+    "canvas-fit": "^1.5.0",
+    "d3": "^5.9.7",
+    "d3-dsv": "^1.1.1",
+    "dat.gui": "^0.7.6",
+    "eslint": "^6.1.0",
+    "luxon": "^1.17.2",
+    "mapbox-gl": "^1.2.0",
+    "spring-animator": "^2.0.0",
+    "standard": "^13.1.0"
+  }
+}
