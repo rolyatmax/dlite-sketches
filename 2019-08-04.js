@@ -2,7 +2,7 @@
 
 const { GUI } = require('dat.gui')
 const d3 = require('d3')
-const createDlite = require('./create-dlite')
+const createDlite = require('./dlite/dlite-0.0.1')
 const createLoopToggle = require('./helpers/create-loop')
 
 const MAPBOX_TOKEN = require('./mapbox-token')

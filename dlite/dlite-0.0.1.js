@@ -47,11 +47,11 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
   dliteCanvas.style['pointer-events'] = 'none' // let the user interact with the mapbox map below
   const resizeCanvas = fit(dliteCanvas, container)
 
-  const pico = PicoGL.createApp(dliteCanvas)
+  const picoApp = PicoGL.createApp(dliteCanvas)
 
   function resize () {
     resizeCanvas()
-    pico.viewport(0, 0, dliteCanvas.width, dliteCanvas.height)
+    picoApp.viewport(0, 0, dliteCanvas.width, dliteCanvas.height)
   }
 
   // TODO: provide a teardown function?
@@ -75,7 +75,6 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
         // nearZMultiplier = 0.1,
         // farZMultiplier = 10
       }
-      // devicePixelRatio = 1,
       // coordinateOrigin = DEFAULT_COORDINATE_ORIGIN,
       // wrapLongitude = false
     })
@@ -83,7 +82,7 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
 
   // { vs, fs, uniforms, vertexArray, primitive, count, instanceCount?, framebuffer, parameters }
   function dlite (layerOpts) {
-    const NOT_SUPPORTED_YET = ['instanceCount', 'parameters', 'framebuffer']
+    const NOT_SUPPORTED_YET = ['instanceCount', 'parameters', 'framebuffer', 'transform', 'blend']
     for (const opt of NOT_SUPPORTED_YET) {
       if (opt in layerOpts) throw new Error(`Option \`${opt}\` not implemented yet`)
     }
@@ -93,8 +92,8 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     const body = layerOpts.vs.slice(splitAt)
     const vs = head + PROJECTION_GLSL + body
     const fs = layerOpts.fs
-    const program = pico.createProgram(vs, fs)
-    const drawCall = pico.createDrawCall(program, layerOpts.vertexArray)
+    const program = picoApp.createProgram(vs, fs)
+    const drawCall = picoApp.createDrawCall(program, layerOpts.vertexArray)
 
     if ('primitive' in layerOpts) drawCall.primitive(layerOpts.primitive)
     if ('uniforms' in layerOpts) {
@@ -110,6 +109,11 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
       const NOT_SUPPORTED_YET = ['attributes', 'instanceCount', 'parameters', 'framebuffer']
       for (const opt of NOT_SUPPORTED_YET) {
         if (opt in renderOpts) throw new Error(`Updating option \`${opt}\` in render() call is not implemented yet`)
+      }
+
+      const blend = 'blend' in renderOpts ? renderOpts.blend : 'blend' in layerOpts ? layerOpts.blend : null
+      if (blend !== null) {
+        if (blend === false)
       }
 
       // TODO: if new vertexArray, create a new drawCall?
@@ -136,10 +140,10 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
 
   dlite.mapbox = mapbox
   dlite.onload = onload
-  dlite.pico = pico // ??? merge pico fns with the dlite object?
+  dlite.pico = picoApp // ??? merge pico fns with the dlite object?
   dlite.clear = function clear (...color) {
-    pico.clearColor(...color)
-    pico.clear()
+    picoApp.clearColor(...color)
+    picoApp.clear()
   }
   // todo: include project / unproject functions from mercator projection
   // dlite.project
@@ -292,7 +296,6 @@ function unproject (xyz, { width, height, latitude, longitude, scale, pitch, bea
 
 function getUniformsFromViewport ({
   viewState,
-  devicePixelRatio = 1,
   coordinateOrigin = DEFAULT_COORDINATE_ORIGIN,
   wrapLongitude = false
 }) {
@@ -322,7 +325,6 @@ function getUniformsFromViewport ({
     positionCommonSpace[3] = 1
     projectionCenter = vec4.transformMat4([], positionCommonSpace, viewProjectionMatrix)
 
-    // Always apply uncentered projection matrix if available (shader adds center)
     viewProjectionMatrix = mat4.multiply([], projectionMatrix, viewMatrix)
     // Zero out 4th coordinate ("after" model matrix) - avoids further translations
     viewProjectionMatrix = mat4.multiply([], viewProjectionMatrix, VECTOR_TO_POINT_MATRIX)
