@@ -1,7 +1,3 @@
-// TODO:
-// * consider using deck's map controller instead of mapbox because mapbox has such a lag it causes the two canvas to go out of sync
-// * figure out where `altitude` comes from in web-mercator-projection stuff
-
 // const { PicoGL } = require('./node_modules/picogl/src/picogl') // if you turn this on, you need to add -p esmify to the run cmd
 const PicoGL = require('picogl')
 const fit = require('canvas-fit')
@@ -94,7 +90,6 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     const fs = layerOpts.fs
     const program = picoApp.createProgram(vs, fs)
     let drawCall = picoApp.createDrawCall(program, layerOpts.vertexArray)
-    if ('primitive' in layerOpts) drawCall.primitive(layerOpts.primitive)
 
     // can pass in any updates to draw call EXCEPT vs and fs changes:
     // { uniforms, vertexArray, primitive, count, instanceCount, framebuffer, blend, depth, rasterize, cullBackfaces, parameters }
@@ -107,9 +102,6 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
       // TODO: see if vertexArray has changed since last frame?? maybe end up owning vertexArray and attribute creation?
       if ('vertexArray' in renderOpts) {
         drawCall = picoApp.createDrawCall(program, renderOpts.vertexArray)
-        // reuse the layerOpts primitive just in case primitive wasn't given
-        // with renderOpts (which will be updated later in this call)
-        if ('primitive' in layerOpts) drawCall.primitive(layerOpts.primitive)
       }
 
       const blend = 'blend' in renderOpts ? renderOpts.blend : 'blend' in layerOpts ? layerOpts.blend : null
@@ -159,7 +151,8 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
         drawCall.uniform(name, uniforms[name])
       }
 
-      if ('primitive' in renderOpts) drawCall.primitive(renderOpts.primitive)
+      const primitive = 'primitive' in renderOpts ? renderOpts.primitive : 'primitive' in layerOpts ? layerOpts.primitive : null
+      if (primitive !== null) drawCall.primitive(primitive)
       const count = 'count' in renderOpts ? renderOpts.count : 'count' in layerOpts ? layerOpts.count : null
       const instanceCount = 'instanceCount' in renderOpts ? renderOpts.instanceCount : 'instanceCount' in layerOpts ? layerOpts.instanceCount : null
       if (count !== null && instanceCount !== null) {
