@@ -4,6 +4,15 @@ const fit = require('canvas-fit')
 const mapboxgl = require('mapbox-gl')
 const mat4 = require('gl-mat4')
 const vec4 = require('gl-vec4')
+const {
+  getViewMatrix,
+  getDistanceScales,
+  getProjectionParameters,
+  lngLatToWorld,
+  worldToPixels,
+  pixelsToWorld,
+  worldToLngLat
+} = require('viewport-mercator-project')
 
 const RETURN = `
 `
@@ -240,16 +249,6 @@ vec4 project_position_to_clipspace(vec3 position, vec3 offset) {
 `
 
 // --------------------------------------------------------------------------------------------------
-
-const {
-  getViewMatrix,
-  getDistanceScales,
-  getProjectionParameters,
-  lngLatToWorld,
-  worldToPixels,
-  pixelsToWorld,
-  worldToLngLat
-} = require('viewport-mercator-project')
 
 // To quickly set a vector to zero
 const ZERO_VECTOR = [0, 0, 0, 0]
