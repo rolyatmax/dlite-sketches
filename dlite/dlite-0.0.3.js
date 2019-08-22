@@ -17,7 +17,7 @@ const {
 const RETURN = `
 `
 
-module.exports = function createDlite (mapboxToken, initialViewState, mapStyle = 'dark', container = window) {
+module.exports = function createDlite (mapboxToken, initialViewState, mapStyle = 'mapbox://styles/mapbox/dark-v9', container = window) {
   mapboxgl.accessToken = mapboxToken
 
   const { center, zoom, bearing, pitch } = initialViewState
@@ -35,7 +35,7 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
 
   const mapbox = new mapboxgl.Map({
     container: mapContainer,
-    style: `mapbox://styles/mapbox/${mapStyle}-v9`,
+    style: mapStyle,
     center: center,
     zoom: zoom,
     bearing: bearing,
