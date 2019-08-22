@@ -1,7 +1,7 @@
 /* global fetch */
 
 const { GUI } = require('dat.gui')
-const createDlite = require('./dlite/dlite-0.0.2')
+const createDlite = require('./dlite/dlite-0.0.3')
 const createLoopToggle = require('./helpers/create-loop')
 const { createSpring } = require('spring-animator')
 
@@ -155,8 +155,7 @@ fetch(DATA_PATH)
           vFragColor = vec4(0);
         } else {
           vec3 pos = vec3(position, tripDuration * heightMult);
-          vec3 offset = vec3(0.0);
-          gl_Position = project_position_to_clipspace(pos, offset);
+          gl_Position = project_position_to_clipspace(pos);
           gl_PointSize = project_size(size);
           vec3 color;
           if (direction == -1.0) {
