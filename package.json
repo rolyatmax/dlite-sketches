@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "start": "budo 2019-08-15.js --live --open"
+    "start": "budo 2019-08-26.js --live --open"
   },
   "eslintConfig": {
     "extends": [

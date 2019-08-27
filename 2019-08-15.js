@@ -199,9 +199,13 @@ fetch(DATA_PATH)
       vertexArray: vertexArray,
       blend: {
         csrc: dlite.picoApp.gl.SRC_ALPHA,
-        cdest: dlite.picoApp.gl.ONE_MINUS_SRC_ALPHA,
         asrc: dlite.picoApp.gl.ONE,
-        adest: dlite.picoApp.gl.ONE
+        cdest: dlite.picoApp.gl.DST_ALPHA,
+        adest: dlite.picoApp.gl.ONE,
+        // csrc: dlite.picoApp.gl.SRC_ALPHA,
+        // cdest: dlite.picoApp.gl.ONE_MINUS_SRC_ALPHA,
+        // asrc: dlite.picoApp.gl.ONE,
+        // adest: dlite.picoApp.gl.ONE_MINUS_SRC_ALPHA
       }
     })
 
