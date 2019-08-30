@@ -1,7 +1,7 @@
 /* global fetch */
 
 const { GUI } = require('dat.gui')
-const createDlite = require('./dlite/dlite-0.0.3')
+const createDlite = require('./dlite/dlite-0.0.4')
 const createLoopToggle = require('./helpers/create-loop')
 const { createSpring } = require('spring-animator')
 
@@ -21,12 +21,11 @@ const dlite = createDlite(MAPBOX_TOKEN, viewState)
 const settings = {
   opacity: 0.015,
   size: 10,
-  scaleDiv: 5000,
-  arcResolution: 30,
+  arcResolution: 40,
   selectedMonth: 0,
   windowSize: 24,
   arcHeight: 1,
-  framesPerMonth: 0.8,
+  framesPerMonth: 5,
   framesPerViewState: 2200,
   stiffness: 0.0001,
   damping: 0.3,
@@ -47,11 +46,10 @@ Promise.all([
   const gui = new GUI()
   gui.add(settings, 'opacity', 0.01, 0.3)
   gui.add(settings, 'size', 1, 100000)
-  gui.add(settings, 'scaleDiv', 1, 9000)
   gui.add(settings, 'selectedMonth', 0, 240).step(1).listen()
   gui.add(settings, 'windowSize', 0, 120)
   gui.add(settings, 'arcHeight', 0, 2)
-  gui.add(settings, 'framesPerMonth', 0.1, 5)
+  gui.add(settings, 'framesPerMonth', 0.1, 50)
   gui.add(settings, 'framesPerViewState', 1, 3000).step(1)
   gui.add(settings, 'stiffness', 0.0001, 0.1).step(0.0001)
   gui.add(settings, 'damping', 0, 1)
@@ -83,38 +81,82 @@ Promise.all([
   const typedData = getData(data.routeData, airports)
   const instanceCount = typedData.origins.length / 2
 
-  const vertexArray = dlite.picoApp.createVertexArray()
   const origins = dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 2, typedData.origins)
   const destinations = dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 2, typedData.destinations)
   const timestamps = dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 2, typedData.timestamps)
   const counts = dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 3, typedData.counts)
   const interpolations = dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 2, new Float32Array(arcPositions))
-  vertexArray.vertexAttributeBuffer(0, interpolations)
-  vertexArray.instanceAttributeBuffer(1, origins)
-  vertexArray.instanceAttributeBuffer(2, destinations)
-  vertexArray.instanceAttributeBuffer(3, timestamps)
-  vertexArray.instanceAttributeBuffer(4, counts)
 
-  const renderPoints = dlite({
+  const vColorBuffers = [
+    dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 4, new Float32Array(instanceCount * 4)),
+    dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 4, new Float32Array(instanceCount * 4)),
+    dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 4, new Float32Array(instanceCount * 4))
+  ]
+
+  const vHeightBuffers = [
+    dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 1, new Float32Array(instanceCount)),
+    dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 1, new Float32Array(instanceCount)),
+    dlite.picoApp.createVertexBuffer(dlite.picoApp.gl.FLOAT, 1, new Float32Array(instanceCount))
+  ]
+
+  const renderVertexArray = dlite.picoApp.createVertexArray()
+    .vertexAttributeBuffer(0, interpolations)
+    .instanceAttributeBuffer(1, origins)
+    .instanceAttributeBuffer(2, destinations)
+    .instanceAttributeBuffer(3, vColorBuffers[2])
+    .instanceAttributeBuffer(4, vHeightBuffers[2])
+
+  const instanceStateVertexArray = dlite.picoApp.createVertexArray()
+    .vertexAttributeBuffer(0, origins)
+    .vertexAttributeBuffer(1, destinations)
+    .vertexAttributeBuffer(2, timestamps)
+    .vertexAttributeBuffer(3, counts)
+    .vertexAttributeBuffer(4, vColorBuffers[0])
+    .vertexAttributeBuffer(5, vColorBuffers[1])
+    .vertexAttributeBuffer(6, vHeightBuffers[0])
+    .vertexAttributeBuffer(7, vHeightBuffers[1])
+
+  let curBufferIdx = 0
+  const updateInstanceState = dlite({
     vs: `#version 300 es
     precision highp float;
-    layout(location=0) in vec2 interpolation;
-    layout(location=1) in vec2 origin;
-    layout(location=2) in vec2 destination;
-    layout(location=3) in vec2 timestamp;
-    layout(location=4) in vec3 counts;
+    layout(location=0) in vec2 origin;
+    layout(location=1) in vec2 destination;
+    layout(location=2) in vec2 timestamp;
+    layout(location=3) in vec3 counts;
+    layout(location=4) in vec4 prevColor;
+    layout(location=5) in vec4 curColor;
+    layout(location=6) in float prevHeight;
+    layout(location=7) in float curHeight;
 
     uniform float opacity;
-    uniform float size;
     uniform vec2 timeWindow;
     uniform float arcHeight;
+    uniform float stiffness;
+    uniform float damping;
 
-    out vec4 vFragColor;
+    out vec4 vColor;
     out float vHeight;
 
     #define PURPLE vec3(61, 72, 139) / 255.0
     #define BLUE vec3(31, 130, 143) / 255.0
     #define YELLOW vec3(226, 230, 0) / 255.0
+
+    float getNextValue(float cur, float prev, float dest) {
+      float velocity = cur - prev;
+      float delta = dest - cur;
+      float spring = delta * stiffness;
+      float damper = velocity * -1.0 * damping;
+      return spring + damper + velocity + cur;
+    }
+
+    vec4 getNextValue(vec4 cur, vec4 prev, vec4 dest) {
+      vec4 velocity = cur - prev;
+      vec4 delta = dest - cur;
+      vec4 spring = delta * stiffness;
+      vec4 damper = velocity * -1.0 * damping;
+      return spring + damper + velocity + cur;
+    }
 
     void main() {
       float y = timestamp.x;
@@ -131,49 +173,99 @@ Promise.all([
       );
 
       if (t < 0.001) {
-        gl_Position = vec4(0);
-        gl_PointSize = 0.0;
-        vFragColor = vec4(0);
+        vColor = vec4(0);
         vHeight = 0.0;
-        return;
-      }
-
-      vec4 worldOrigin = project_position(vec4(origin, 0, 0));
-      vec4 worldDestination = project_position(vec4(destination, 0, 0));
-      float worldDist = distance(worldOrigin, worldDestination);
-      float meters = 1.0 / project_size(1.0 / worldDist);
-
-      vec2 delta = (destination - origin) * interpolation.x;
-      vec3 position = vec3(origin + delta, arcHeight * interpolation.y * meters / 2.0);
-      vHeight = interpolation.y;
-
-      gl_Position = project_position_to_clipspace(position);
-      gl_PointSize = project_size(size);
-
-      float availableCapacity = (counts.y - counts.x) / counts.y;
-      vec3 c;
-      if (availableCapacity < 0.5) {
-        c = mix(PURPLE, BLUE, smoothstep(0.3, 0.5, availableCapacity));
       } else {
-        c = mix(BLUE, YELLOW, smoothstep(0.5, 0.7, availableCapacity));
+        // HACK: adding this so the compiler doesn't strip out the project_uCenter uniform
+        // because PicoGL ends up throwing errors when we try to pass it in but it's been stripped out of the source
+        vec4 wastedVar = project_position_to_clipspace(vec3(0));
+
+        vec4 worldOrigin = project_position(vec4(origin, 0, 0));
+        vec4 worldDestination = project_position(vec4(destination, 0, 0));
+        float worldDist = distance(worldOrigin, worldDestination);
+        float meters = 1.0 / project_size(1.0 / worldDist);
+  
+        vHeight = arcHeight * meters / 2.0 * t;
+  
+        float availableCapacity = (counts.y - counts.x) / counts.y;
+        vec3 c;
+        if (availableCapacity < 0.5) {
+          c = mix(PURPLE, BLUE, smoothstep(0.3, 0.5, availableCapacity));
+        } else {
+          c = mix(BLUE, YELLOW, smoothstep(0.5, 0.7, availableCapacity));
+        }
+  
+        vColor = vec4(c, opacity * t);
       }
 
-      vFragColor = vec4(c, opacity * t);
+      // Do the spring stuff here
+      vColor = getNextValue(curColor, prevColor, vColor);
+      vHeight = getNextValue(curHeight, prevHeight, vHeight);
     }`,
 
     fs: `#version 300 es
     precision highp float;
-    in vec4 vFragColor;
+    in vec4 vColor;
     in float vHeight;
     out vec4 fragColor;
     void main() {
-      if (vHeight < 0.01 || vFragColor.a < 0.001) {
-        discard;
+      fragColor = vec4(0);
+    }`,
+    transform: {
+      vColor: vColorBuffers[(curBufferIdx + 2) % 3],
+      vHeight: vHeightBuffers[(curBufferIdx + 2) % 3]
+    },
+    vertexArray: instanceStateVertexArray,
+    count: instanceCount,
+    primitive: dlite.picoApp.gl.POINTS
+  })
+
+  const renderPoints = dlite({
+    vs: `#version 300 es
+    precision highp float;
+    layout(location=0) in vec2 interpolation;
+    layout(location=1) in vec2 iOrigin;
+    layout(location=2) in vec2 iDestination;
+    layout(location=3) in vec4 iColor;
+    layout(location=4) in float iHeight;
+
+    uniform float size;
+
+    out vec4 vColor;
+    out float vHeight;
+
+    void main() {
+      if (iColor.a < 0.001) {
+        gl_Position = vec4(0);
+        gl_PointSize = 0.0;
+        vColor = vec4(0);
+        vHeight = 0.0;
+        return;
       }
-      fragColor = vFragColor;
+
+      vec2 delta = (iDestination - iOrigin) * interpolation.x;
+      vHeight = iHeight * interpolation.y;
+      vec3 position = vec3(iOrigin + delta, vHeight);
+
+      gl_Position = project_position_to_clipspace(position);
+      gl_PointSize = project_size(size);
+
+      vColor = iColor;
     }`,
 
-    vertexArray: vertexArray,
+    fs: `#version 300 es
+    precision highp float;
+    in vec4 vColor;
+    in float vHeight;
+    out vec4 fragColor;
+    void main() {
+      if (vHeight < 0.001 || vColor.a < 0.001) {
+        discard;
+      }
+      fragColor = vColor;
+    }`,
+
+    vertexArray: renderVertexArray,
     blend: {
       csrc: dlite.picoApp.gl.SRC_ALPHA,
       asrc: dlite.picoApp.gl.SRC_ALPHA,
@@ -240,15 +332,37 @@ Promise.all([
       'triangle strip': dlite.picoApp.gl.TRIANGLE_STRIP
     }
 
+    renderVertexArray
+      .instanceAttributeBuffer(3, vColorBuffers[(curBufferIdx + 2) % 3])
+      .instanceAttributeBuffer(4, vHeightBuffers[(curBufferIdx + 2) % 3])
+
     renderPoints({
       count: settings.arcResolution,
       instanceCount: instanceCount,
       primitive: primitives[settings.primitive],
       uniforms: {
+        size: settings.size
+      }
+    })
+
+    curBufferIdx = (curBufferIdx + 1) % 3
+    instanceStateVertexArray
+      .vertexAttributeBuffer(4, vColorBuffers[curBufferIdx])
+      .vertexAttributeBuffer(5, vColorBuffers[(curBufferIdx + 1) % 3])
+      .vertexAttributeBuffer(6, vHeightBuffers[curBufferIdx])
+      .vertexAttributeBuffer(7, vHeightBuffers[(curBufferIdx + 1) % 3])
+
+    updateInstanceState({
+      transform: {
+        vColor: vColorBuffers[(curBufferIdx + 2) % 3],
+        vHeight: vHeightBuffers[(curBufferIdx + 2) % 3]
+      },
+      uniforms: {
         opacity: settings.opacity,
-        size: settings.size,
         timeWindow: new Float32Array([settings.selectedMonth - settings.windowSize / 2, settings.selectedMonth + settings.windowSize / 2]),
-        arcHeight: arcHeight
+        arcHeight: arcHeight,
+        stiffness: settings.stiffness,
+        damping: settings.damping
       }
     })
   }

@@ -87,11 +87,6 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
 
   // { vs, fs, uniforms, vertexArray, primitive, count, instanceCount, framebuffer, parameters }
   function dlite (layerOpts) {
-    const NOT_SUPPORTED_YET = ['parameters', 'transform']
-    for (const opt of NOT_SUPPORTED_YET) {
-      if (opt in layerOpts) throw new Error(`Option \`${opt}\` not implemented yet`)
-    }
-
     const splitAt = layerOpts.vs.startsWith('#version 300 es') ? layerOpts.vs.indexOf(RETURN) + 1 : 0
     const head = layerOpts.vs.slice(0, splitAt)
     const body = layerOpts.vs.slice(splitAt)
@@ -117,11 +112,6 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     // can pass in any updates to draw call EXCEPT vs and fs changes:
     // { uniforms, vertexArray, primitive, count, instanceCount, framebuffer, blend, depth, rasterize, cullBackfaces, parameters }
     return function render (renderOpts) {
-      const NOT_SUPPORTED_YET = ['parameters', 'transform']
-      for (const opt of NOT_SUPPORTED_YET) {
-        if (opt in renderOpts) throw new Error(`Updating option \`${opt}\` in render() call is not implemented yet`)
-      }
-
       // the varyings just for this call
       let renderTransformVaryings = transformFeedbackVaryings
       if ('transform' in renderOpts) {
@@ -229,6 +219,7 @@ function isEqualVaryings (arr1, arr2) {
   let j = 0
   while (j < arr1.length) {
     if (arr1[j] !== arr2[j]) return false
+    j += 1
   }
   return true
 }
