@@ -1,3 +1,4 @@
+const VERSION = '0.0.4'
 // const { PicoGL } = require('./node_modules/picogl/src/picogl') // if you turn this on, you need to add -p esmify to the run cmd
 const PicoGL = require('picogl')
 const fit = require('canvas-fit')
@@ -197,6 +198,7 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     }
   }
 
+  dlite.VERSION = VERSION
   dlite.mapbox = mapbox
   dlite.onload = onload
   dlite.picoApp = picoApp // ??? merge pico fns with the dlite object?
