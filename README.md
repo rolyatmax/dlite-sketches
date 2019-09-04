@@ -23,5 +23,5 @@ A repo I use to iterate on the API of dlite by exploring lots of use cases
  - [ ] return project/unproject fns
  - [ ] create/manage vertexArrayObject/attributes for user?
  - [ ] experiment with exporting layers
- - [ ] create default fragment shader for transform feedback
+ - [X] create default fragment shader for transform feedback
  - [ ] create defaults to run on every call to make sure draw call state doesn't bleed into each other
