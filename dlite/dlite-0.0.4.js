@@ -92,7 +92,7 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     const head = layerOpts.vs.slice(0, splitAt)
     const body = layerOpts.vs.slice(splitAt)
     const vs = head + PROJECTION_GLSL + body
-    const fs = layerOpts.fs
+    const fs = layerOpts.fs || DEFAULT_FRAGMENT_SHADER
 
     let transformFeedback = null
     let transformFeedbackVaryings = null
@@ -103,7 +103,7 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
       transformFeedback = picoApp.createTransformFeedback()
       for (let i = 0; i < transformFeedbackVaryings.length; i++) {
         const varying = transformFeedbackVaryings[i]
-        transformFeedback.feedbackBuffer(i, layerOpts.transform[varying]);
+        transformFeedback.feedbackBuffer(i, layerOpts.transform[varying])
       }
     }
 
@@ -121,7 +121,7 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
         // TODO: should we be updating these on every frame like this?
         for (let i = 0; i < renderTransformVaryings.length; i++) {
           const varying = renderTransformVaryings[i]
-          transformFeedback.feedbackBuffer(i, renderOpts.transform[varying]);
+          transformFeedback.feedbackBuffer(i, renderOpts.transform[varying])
         }
       }
 
@@ -201,7 +201,10 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
   dlite.VERSION = VERSION
   dlite.mapbox = mapbox
   dlite.onload = onload
-  dlite.picoApp = picoApp // ??? merge pico fns with the dlite object?
+  dlite.picoApp = picoApp
+  dlite.gl = picoApp.gl
+  dlite.createVertexArray = picoApp.createVertexArray.bind(picoApp) // ??? merge other pico fns with the dlite object?
+  dlite.createVertexBuffer = picoApp.createVertexBuffer.bind(picoApp) // ??? merge other pico fns with the dlite object?
   dlite.PicoGL = PicoGL
   dlite.clear = function clear (...color) {
     picoApp.clearColor(...color)
@@ -290,6 +293,13 @@ vec4 project_position_to_clipspace(vec3 position) {
 }
 
 `
+
+const DEFAULT_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+out vec4 fragColor;
+void main() {
+  fragColor = vec4(0);
+}`
 
 // --------------------------------------------------------------------------------------------------
 

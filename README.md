@@ -6,14 +6,13 @@ A repo I use to iterate on the API of dlite by exploring lots of use cases
 2. Run `npm i && npm start` to run the most recent demo
 
 
-
 ------------
 
 ### To do
- - [ ] Add `data/` to this repo
+ - [X] Add `data/` to this repo
  - [ ] Try pulling out features into common libraries:
-      - [ ] spring-based camera
-      - [ ] physics-based simulation with transform-feedback (buffer rotating, etc)
+      - [X] spring-based camera
+      - [X] physics-based simulation with transform-feedback (buffer rotating, etc)
       - [ ] arc-rendering / path-rendering
 
  - [ ] consider using deck's map controller instead of mapbox because mapbox has such a lag it causes the two canvas to go out of sync
