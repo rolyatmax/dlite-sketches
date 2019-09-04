@@ -1,7 +1,7 @@
 /* global fetch */
 
 const { GUI } = require('dat.gui')
-const createDlite = require('./dlite/dlite-0.0.5')
+const createDlite = require('./dlite/dlite-0.0.5') // THIS VERSION NOT YET WORKING - STILL FIGURING OUT A BUG WITH THE CAMERA UNIFORM BUFFER
 const createLoopToggle = require('./helpers/create-loop')
 const { createSpring } = require('spring-animator')
 

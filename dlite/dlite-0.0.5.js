@@ -1,4 +1,5 @@
-const VERSION = '0.0.4'
+// THIS VERSION NOT YET WORKING - STILL FIGURING OUT A BUG WITH THE CAMERA UNIFORM BUFFER
+const VERSION = '0.0.5'
 // const { PicoGL } = require('./node_modules/picogl/src/picogl') // if you turn this on, you need to add -p esmify to the run cmd
 const PicoGL = require('picogl')
 const fit = require('canvas-fit')
