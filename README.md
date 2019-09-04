@@ -17,7 +17,8 @@ A repo I use to iterate on the API of dlite by exploring lots of use cases
 
  - [ ] consider using deck's map controller instead of mapbox because mapbox has such a lag it causes the two canvas to go out of sync
  - [ ] figure out where `altitude` comes from in web-mercator-projection stuff (from Tarek: it's always 1.5x the screenheight?)
- - [ ] make camera uniforms a uniform block?
+ - [ ] simplify camera uniform types
+ - [X] make camera uniforms a uniform block?
  - [ ] try rendering to framebuffer
  - [ ] make mapbox optional (show no map)
  - [ ] return project/unproject fns
@@ -25,3 +26,4 @@ A repo I use to iterate on the API of dlite by exploring lots of use cases
  - [ ] experiment with exporting layers
  - [X] create default fragment shader for transform feedback
  - [ ] create defaults to run on every call to make sure draw call state doesn't bleed into each other
+ - [ ] update docs for timer

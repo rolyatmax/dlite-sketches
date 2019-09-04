@@ -1,7 +1,7 @@
 /* global fetch */
 
 const { GUI } = require('dat.gui')
-const createDlite = require('./dlite/dlite-0.0.5') // THIS VERSION NOT YET WORKING - STILL FIGURING OUT A BUG WITH THE CAMERA UNIFORM BUFFER
+const createDlite = require('./dlite/dlite-0.0.5')
 const createLoopToggle = require('./helpers/create-loop')
 const { createSpring } = require('spring-animator')
 
@@ -19,8 +19,9 @@ const viewState = {
 const dlite = createDlite(MAPBOX_TOKEN, viewState)
 
 const settings = {
-  opacity: 0.015,
+  opacity: 0.1,
   size: 10,
+  instanceCountPerc: 1,
   arcResolution: 40,
   selectedMonth: 0,
   windowSize: 24,
@@ -31,7 +32,7 @@ const settings = {
   damping: 0.22,
   animate: true,
   isRoaming: false,
-  primitive: 'line loop'
+  primitive: 'points'
 }
 
 window.dlite = dlite
@@ -46,6 +47,7 @@ Promise.all([
   const gui = new GUI()
   gui.add(settings, 'opacity', 0.01, 0.3)
   gui.add(settings, 'size', 1, 100000)
+  gui.add(settings, 'instanceCountPerc', 0, 1).step(0.01)
   gui.add(settings, 'selectedMonth', 0, 240).step(1).listen()
   gui.add(settings, 'windowSize', 0, 120)
   gui.add(settings, 'arcHeight', 0, 2)
@@ -119,10 +121,6 @@ Promise.all([
       if (t < 0.001) {
         vColor = vec4(0);
       } else {
-        // HACK: adding this so the compiler doesn't strip out the project_uCenter uniform
-        // because PicoGL ends up throwing errors when we try to pass it in but it's been stripped out of the source
-        vec4 wastedVar = project_position_to_clipspace(vec3(0));
-
         float availableCapacity = (counts.y - counts.x) / counts.y;
         vec3 c;
         if (availableCapacity < 0.5) {
@@ -137,7 +135,7 @@ Promise.all([
     transform: {
       vColor: destinationColors
     },
-    count: instanceCount
+    count: instanceCount * settings.instanceCountPerc | 0
   })
 
   const renderVertexArray = dlite.createVertexArray()
@@ -251,19 +249,9 @@ Promise.all([
       'triangle strip': dlite.gl.TRIANGLE_STRIP
     }
 
-    renderVertexArray.instanceAttributeBuffer(3, colorGpuSpring.getCurrentValue())
-
-    renderPoints({
-      count: settings.arcResolution,
-      instanceCount: instanceCount,
-      primitive: primitives[settings.primitive],
-      uniforms: {
-        size: settings.size,
-        arcHeight: arcHeight
-      }
-    })
-
-    updateColorDestState({
+    const updateColorTimings = updateColorDestState({
+      // timer: true,
+      count: instanceCount * settings.instanceCountPerc | 0,
       uniforms: {
         opacity: settings.opacity,
         timeWindow: new Float32Array([settings.selectedMonth - settings.windowSize / 2, settings.selectedMonth + settings.windowSize / 2])
@@ -271,7 +259,29 @@ Promise.all([
     })
 
     colorGpuSpring.setDestination(destinationColors)
-    colorGpuSpring.tick(settings.stiffness, settings.damping)
+    const gpuSpringTimings = colorGpuSpring.tick(
+      settings.stiffness,
+      settings.damping,
+      instanceCount * settings.instanceCountPerc | 0,
+      // true
+    )
+
+    renderVertexArray.instanceAttributeBuffer(3, colorGpuSpring.getCurrentValue())
+
+    const renderPointsTimings = renderPoints({
+      // timer: true,
+      count: settings.arcResolution,
+      instanceCount: instanceCount * settings.instanceCountPerc | 0,
+      primitive: primitives[settings.primitive],
+      uniforms: {
+        size: settings.size,
+        arcHeight: arcHeight
+      }
+    })
+
+    // if (updateColorTimings) console.log('updateColorTimings', updateColorTimings)
+    // if (gpuSpringTimings) console.log('gpuSpringTimings', gpuSpringTimings)
+    // if (renderPointsTimings) console.log('renderPointsTimings', renderPointsTimings)
   }
 })
 
@@ -353,10 +363,6 @@ function createGPUSpring (dlite, size, data, stiffness, damping) {
     }
 
     void main() {
-      // HACK: adding this so the compiler doesn't strip out the project_uCenter uniform
-      // because PicoGL ends up throwing errors when we try to pass it in but it's been stripped out of the source
-      vec4 wastedVar = project_position_to_clipspace(vec3(0));
-
       vNextValue = getNextValue(curValue, prevValue, destValue);
     }`,
     transform: {
@@ -373,12 +379,14 @@ function createGPUSpring (dlite, size, data, stiffness, damping) {
   function getCurrentValue () {
     return bufferCycle.getCurrent()
   }
-  function tick (s, d) {
+  function tick (s, d, c, useTimer) {
     springStateVertexArray
       .vertexAttributeBuffer(0, bufferCycle.getPrevious())
       .vertexAttributeBuffer(1, bufferCycle.getCurrent())
       .vertexAttributeBuffer(2, destinationBuffer)
-    updateSpringState({
+    const updateSpringTimings = updateSpringState({
+      timer: useTimer,
+      count: Number.isFinite(c) ? c : count,
       uniforms: {
         stiffness: Number.isFinite(s) ? s : stiffness,
         damping: Number.isFinite(d) ? d : damping
@@ -388,6 +396,7 @@ function createGPUSpring (dlite, size, data, stiffness, damping) {
       }
     })
     bufferCycle.rotate()
+    return updateSpringTimings
   }
 }
 

@@ -1,4 +1,3 @@
-// THIS VERSION NOT YET WORKING - STILL FIGURING OUT A BUG WITH THE CAMERA UNIFORM BUFFER
 const VERSION = '0.0.5'
 // const { PicoGL } = require('./node_modules/picogl/src/picogl') // if you turn this on, you need to add -p esmify to the run cmd
 const PicoGL = require('picogl')
@@ -95,6 +94,8 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     const vs = head + PROJECTION_GLSL + body
     const fs = layerOpts.fs || DEFAULT_FRAGMENT_SHADER
 
+    let timer = null
+
     let transformFeedback = null
     let transformFeedbackVaryings = null
     let curProgramTransformFeedbackVaryings = null
@@ -116,6 +117,17 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
     // can pass in any updates to draw call EXCEPT vs and fs changes:
     // { uniforms, vertexArray, primitive, count, instanceCount, framebuffer, blend, depth, rasterize, cullBackfaces, parameters }
     return function render (renderOpts) {
+      let lastTiming = null
+      const useTimer = 'timer' in renderOpts ? renderOpts.timer : 'timer' in layerOpts ? layerOpts.timer : false
+      if (useTimer) {
+        timer = timer || dlite.picoApp.createTimer()
+        if (timer.ready()) {
+          const { gpuTime, cpuTime } = timer
+          lastTiming = { gpuTime, cpuTime }
+        }
+        timer.start()
+      }
+
       // the varyings just for this call
       let renderTransformVaryings = transformFeedbackVaryings
       if ('transform' in renderOpts) {
@@ -200,6 +212,12 @@ module.exports = function createDlite (mapboxToken, initialViewState, mapStyle =
       drawCall.transformFeedback(tf)
 
       drawCall.draw()
+
+      if (useTimer) {
+        timer.end()
+      }
+
+      return lastTiming
     }
   }
 
@@ -239,11 +257,11 @@ const cameraUniformsByPosition = [
   'project_uModelMatrix',
   'project_uViewProjectionMatrix',
   'project_uCenter',
-  'project_uCommonUnitsPerMeter',
-  'project_uCoordinateOrigin',
+  'project_uCommonUnitsPerMeter', // TODO: make float (only z is used)
+  'project_uCoordinateOrigin', // TODO: make vec2 (only xy is used)
   'project_uCommonUnitsPerWorldUnit',
   'project_uCommonUnitsPerWorldUnit2',
-  'project_uCoordinateSystem',
+  'project_uCoordinateSystem', // TODO: make boolean (only values are 1 or 4)
   'project_uScale',
   'project_uAntimeridian',
   'project_uWrapLongitude'
@@ -253,10 +271,10 @@ const cameraUniformTypesByPosition = [
   PicoGL.FLOAT_MAT4,
   PicoGL.FLOAT_MAT4,
   PicoGL.FLOAT_VEC4,
-  PicoGL.FLOAT_VEC3,
-  PicoGL.FLOAT_VEC3,
-  PicoGL.FLOAT_VEC3,
-  PicoGL.FLOAT_VEC3,
+  PicoGL.FLOAT_VEC4, // vec3 but passed as vec4 to keep proper std140 buffer alignment
+  PicoGL.FLOAT_VEC4, // vec3 but passed as vec4 to keep proper std140 buffer alignment
+  PicoGL.FLOAT_VEC4, // vec3 but passed as vec4 to keep proper std140 buffer alignment
+  PicoGL.FLOAT_VEC4, // vec3 but passed as vec4 to keep proper std140 buffer alignment
   PicoGL.FLOAT,
   PicoGL.FLOAT,
   PicoGL.FLOAT,
@@ -268,10 +286,10 @@ layout(std140) uniform DliteCameraProjectionUniforms {
   mat4 project_uModelMatrix;
   mat4 project_uViewProjectionMatrix;
   vec4 project_uCenter;
-  vec3 project_uCommonUnitsPerMeter;
-  vec3 project_uCoordinateOrigin;
-  vec3 project_uCommonUnitsPerWorldUnit;
-  vec3 project_uCommonUnitsPerWorldUnit2;
+  vec4 project_uCommonUnitsPerMeter; // vec3 but passed as vec4 to keep proper std140 buffer alignment
+  vec4 project_uCoordinateOrigin; // vec3 but passed as vec4 to keep proper std140 buffer alignment
+  vec4 project_uCommonUnitsPerWorldUnit; // vec3 but passed as vec4 to keep proper std140 buffer alignment
+  vec4 project_uCommonUnitsPerWorldUnit2; // vec3 but passed as vec4 to keep proper std140 buffer alignment
   float project_uCoordinateSystem;
   float project_uScale;
   float project_uAntimeridian;
@@ -300,7 +318,7 @@ vec2 project_mercator_(vec2 lnglat) {
 
 vec4 project_offset_(vec4 offset) {
   float dy = clamp(offset.y, -1., 1.);
-  vec3 commonUnitsPerWorldUnit = project_uCommonUnitsPerWorldUnit + project_uCommonUnitsPerWorldUnit2 * dy;
+  vec3 commonUnitsPerWorldUnit = project_uCommonUnitsPerWorldUnit.xyz + project_uCommonUnitsPerWorldUnit2.xyz * dy;
   return vec4(offset.xyz * commonUnitsPerWorldUnit, offset.w);
 }
 
