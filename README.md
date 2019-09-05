@@ -16,8 +16,8 @@ A repo I use to iterate on the API of dlite by exploring lots of use cases
       - [ ] arc-rendering / path-rendering
 
  - [ ] consider using deck's map controller instead of mapbox because mapbox has such a lag it causes the two canvas to go out of sync
- - [ ] figure out where `altitude` comes from in web-mercator-projection stuff (from Tarek: it's always 1.5x the screenheight?)
- - [ ] simplify camera uniform types
+ - [X] figure out where `altitude` comes from in web-mercator-projection stuff (from Tarek: it's always 1.5x the screenheight?)
+ - [X] simplify camera uniform types
  - [X] make camera uniforms a uniform block?
  - [ ] try rendering to framebuffer
  - [ ] make mapbox optional (show no map)

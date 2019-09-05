@@ -19,20 +19,19 @@ const viewState = {
 const dlite = createDlite(MAPBOX_TOKEN, viewState)
 
 const settings = {
-  opacity: 0.1,
-  size: 10,
+  opacity: 0.5,
+  divisor: 180,
   instanceCountPerc: 1,
   arcResolution: 40,
   selectedMonth: 0,
-  windowSize: 24,
-  arcHeight: 1,
-  framesPerMonth: 5,
+  windowSize: 5,
+  arcHeight: 0.5,
+  framesPerMonth: 0.7,
   framesPerViewState: 2200,
-  stiffness: 0.0025,
+  stiffness: 0.025,
   damping: 0.22,
   animate: true,
-  isRoaming: false,
-  primitive: 'points'
+  isRoaming: false
 }
 
 window.dlite = dlite
@@ -45,8 +44,8 @@ Promise.all([
   dlite.onload.then(toggleLoop)
 
   const gui = new GUI()
-  gui.add(settings, 'opacity', 0.01, 0.3)
-  gui.add(settings, 'size', 1, 100000)
+  gui.add(settings, 'opacity', 0.01, 0.5)
+  gui.add(settings, 'divisor', 1, 300)
   gui.add(settings, 'instanceCountPerc', 0, 1).step(0.01)
   gui.add(settings, 'selectedMonth', 0, 240).step(1).listen()
   gui.add(settings, 'windowSize', 0, 120)
@@ -57,10 +56,9 @@ Promise.all([
   gui.add(settings, 'damping', 0, 1)
   gui.add(settings, 'animate')
   gui.add(settings, 'isRoaming')
-  gui.add(settings, 'primitive', ['points', 'lines', 'line loop', 'triangles', 'triangle strip'])
   gui.add({ setNewCameraPosition }, 'setNewCameraPosition')
 
-  const cameraAnimator = createCameraAnimator(dlite.mapbox, settings.stiffness, settings.damping)
+  const cameraAnimator = createCameraAnimator(dlite.mapbox, 0.002, 0.22)
 
   const heightSpring = createSpring(0.01, 0.2, 0)
 
@@ -75,16 +73,12 @@ Promise.all([
     frames = 0
   }
 
-  const arcInterpolations = new Array(settings.arcResolution).fill().map((_, i) => [
-    i / (settings.arcResolution - 1),
-    Math.sin(i / (settings.arcResolution - 1) * Math.PI)
-  ]).flat()
-
   const typedData = getData(data.routeData, airports)
-  const instanceCount = typedData.origins.length / 2
+  const instanceCount = typedData.origins.length / 3
 
   const destinationColors = dlite.createVertexBuffer(dlite.gl.FLOAT, 4, new Float32Array(instanceCount * 4), dlite.gl.DYNAMIC_DRAW)
-  const colorGpuSpring = createGPUSpring(dlite, 4, new Float32Array(instanceCount * 4))
+  const emptyColorData = new Float32Array(instanceCount * 4)
+  const colorGpuSpring = createGPUSpring(dlite, 4, emptyColorData)
 
   const updateColorDestState = dlite({
     vertexArray: dlite.createVertexArray()
@@ -97,6 +91,7 @@ Promise.all([
 
     uniform float opacity;
     uniform vec2 timeWindow;
+    uniform float divisor;
 
     out vec4 vColor;
 
@@ -118,15 +113,20 @@ Promise.all([
         1.0 - smoothstep(windowMiddle, windowEnd, month)
       );
 
-      if (t < 0.001) {
+      float passengers = counts.x;
+      float seats = counts.y;
+      float flights = counts.z;
+      float seatsPerFlight = flights > 0.0 ? seats / flights : 0.0;
+
+      if (t < 0.001 || passengers == 0.0 || seats == 0.0 || flights == 0.0 || seatsPerFlight > 50.0) {
         vColor = vec4(0);
       } else {
-        float availableCapacity = (counts.y - counts.x) / counts.y;
+        float dataT = seatsPerFlight / divisor;
         vec3 c;
-        if (availableCapacity < 0.5) {
-          c = mix(PURPLE, BLUE, smoothstep(0.3, 0.5, availableCapacity));
+        if (dataT < 0.5) {
+          c = mix(YELLOW, BLUE, smoothstep(0.0, 0.5, dataT));
         } else {
-          c = mix(BLUE, YELLOW, smoothstep(0.5, 0.7, availableCapacity));
+          c = mix(BLUE, PURPLE, smoothstep(0.5, 1.0, dataT));
         }
 
         vColor = vec4(c, opacity * t);
@@ -138,73 +138,6 @@ Promise.all([
     count: instanceCount * settings.instanceCountPerc | 0
   })
 
-  const renderVertexArray = dlite.createVertexArray()
-    .vertexAttributeBuffer(0, dlite.createVertexBuffer(dlite.gl.FLOAT, 2, new Float32Array(arcInterpolations)))
-    .instanceAttributeBuffer(1, dlite.createVertexBuffer(dlite.gl.FLOAT, 2, typedData.origins))
-    .instanceAttributeBuffer(2, dlite.createVertexBuffer(dlite.gl.FLOAT, 2, typedData.destinations))
-    .instanceAttributeBuffer(3, colorGpuSpring.getCurrentValue())
-
-  const renderPoints = dlite({
-    vertexArray: renderVertexArray,
-    vs: `#version 300 es
-    precision highp float;
-    layout(location=0) in vec2 arcPosition;
-    layout(location=1) in vec2 iOrigin;
-    layout(location=2) in vec2 iDestination;
-    layout(location=3) in vec4 iColor;
-
-    uniform float size;
-    uniform float arcHeight;
-
-    out vec4 vColor;
-    out float vHeight;
-
-    void main() {
-      if (iColor.a < 0.001) {
-        gl_Position = vec4(0);
-        gl_PointSize = 0.0;
-        vColor = vec4(0);
-        vHeight = 0.0;
-        return;
-      }
-
-      vec2 delta = (iDestination - iOrigin) * arcPosition.x;
-
-      vec4 worldOrigin = project_position(vec4(iOrigin, 0, 0));
-      vec4 worldDestination = project_position(vec4(iDestination, 0, 0));
-      float worldDist = distance(worldOrigin, worldDestination);
-      float meters = 1.0 / project_size(1.0 / worldDist);
-      vHeight = arcHeight * meters / 2.0;
-
-      vHeight = arcPosition.y * arcHeight * meters / 2.0;
-      vec3 position = vec3(iOrigin + delta, vHeight);
-
-      gl_Position = project_position_to_clipspace(position);
-      gl_PointSize = project_size(size);
-
-      vColor = iColor;
-    }`,
-
-    fs: `#version 300 es
-    precision highp float;
-    in vec4 vColor;
-    in float vHeight;
-    out vec4 fragColor;
-    void main() {
-      if (vHeight < 0.001 || vColor.a < 0.001) {
-        discard;
-      }
-      fragColor = vColor;
-    }`,
-
-    blend: {
-      csrc: dlite.gl.SRC_ALPHA,
-      asrc: dlite.gl.SRC_ALPHA,
-      cdest: dlite.gl.ONE,
-      adest: dlite.gl.ONE
-    }
-  })
-
   const timestampDiv = document.body.appendChild(document.createElement('div'))
   timestampDiv.style.position = 'fixed'
   timestampDiv.style.bottom = '100px'
@@ -212,6 +145,15 @@ Promise.all([
   timestampDiv.style.fontFamily = 'monospace'
   timestampDiv.style.fontSize = '40px'
   timestampDiv.style.color = 'white'
+
+  const arcRenderer = createArcRenderer(dlite, {
+    origins: typedData.origins,
+    destinations: typedData.destinations,
+    originColors: emptyColorData,
+    destinationColors: emptyColorData,
+    arcHeight: settings.arcHeight,
+    arcResolution: settings.arcResolution
+  })
 
   function render (t) {
     dlite.clear(0, 0, 0, 0)
@@ -241,47 +183,31 @@ Promise.all([
     const y = ((settings.selectedMonth / 12) | 0) + 1990
     timestampDiv.innerText = y
 
-    const primitives = {
-      points: dlite.gl.POINTS,
-      lines: dlite.gl.LINES,
-      'line loop': dlite.gl.LINE_LOOP,
-      triangles: dlite.gl.TRIANGLES,
-      'triangle strip': dlite.gl.TRIANGLE_STRIP
-    }
-
-    const updateColorTimings = updateColorDestState({
-      timer: true,
+    updateColorDestState({
       count: instanceCount * settings.instanceCountPerc | 0,
       uniforms: {
         opacity: settings.opacity,
+        divisor: settings.divisor,
         timeWindow: new Float32Array([settings.selectedMonth - settings.windowSize / 2, settings.selectedMonth + settings.windowSize / 2])
       }
     })
 
-    colorGpuSpring.setDestination(destinationColors)
-    const gpuSpringTimings = colorGpuSpring.tick(
+    colorGpuSpring.tick(
+      destinationColors,
       settings.stiffness,
       settings.damping,
-      instanceCount * settings.instanceCountPerc | 0,
-      true
+      instanceCount * settings.instanceCountPerc | 0
     )
 
-    renderVertexArray.instanceAttributeBuffer(3, colorGpuSpring.getCurrentValue())
-
-    const renderPointsTimings = renderPoints({
+    arcRenderer.render({
       timer: true,
-      count: settings.arcResolution,
-      instanceCount: instanceCount * settings.instanceCountPerc | 0,
-      primitive: primitives[settings.primitive],
-      uniforms: {
-        size: settings.size,
-        arcHeight: arcHeight
+      count: instanceCount * settings.instanceCountPerc | 0,
+      arcHeight: arcHeight,
+      buffers: {
+        originColors: colorGpuSpring.getCurrentValue(),
+        destinationColors: colorGpuSpring.getCurrentValue()
       }
     })
-
-    // if (updateColorTimings) console.log('updateColorTimings', updateColorTimings)
-    // if (gpuSpringTimings) console.log('gpuSpringTimings', gpuSpringTimings)
-    // if (renderPointsTimings) console.log('renderPointsTimings', renderPointsTimings)
   }
 })
 
@@ -305,16 +231,16 @@ function getData (routes, airports) {
       const p = parseInt(route.series[month].passengers, 10)
       const s = parseInt(route.series[month].seats, 10)
       const f = parseInt(route.series[month].flights, 10)
-      origins.push(origin.longitude, origin.latitude)
-      destinations.push(dest.longitude, dest.latitude)
+      origins.push(origin.longitude, origin.latitude, 0)
+      destinations.push(dest.longitude, dest.latitude, 0)
       timestamps.push(y, m)
       counts.push(p, s, f)
     }
   }
 
   return {
-    origins: new Float32Array(origins), // vec2 [lng, lat]
-    destinations: new Float32Array(destinations), // vec2 [lng, lat]
+    origins: new Float32Array(origins), // vec3 [lng, lat]
+    destinations: new Float32Array(destinations), // vec3 [lng, lat]
     timestamps: new Float32Array(timestamps), // vec2 [year, month]
     counts: new Float32Array(counts) // vec3 [passengers, seats, flights]
   }
@@ -322,8 +248,132 @@ function getData (routes, airports) {
 
 // ----------------------------------------------------
 
-// TODO:
-// (1) Shouldn't depend on dlite
+function createArcRenderer (dlite, {
+  origins,
+  destinations,
+  originColors,
+  destinationColors,
+  arcHeight,
+  arcResolution
+}) {
+  const arcInterpolations = new Array(arcResolution).fill().map((_, i) => [
+    i / (arcResolution - 1),
+    Math.sin(i / (arcResolution - 1) * Math.PI)
+  ]).flat()
+
+  let originsBuffer = dlite.createVertexBuffer(dlite.gl.FLOAT, 3, origins)
+  let destinationsBuffer = dlite.createVertexBuffer(dlite.gl.FLOAT, 3, destinations)
+  let originColorsBuffer = dlite.createVertexBuffer(dlite.gl.FLOAT, 4, originColors)
+  let destinationColorsBuffer = dlite.createVertexBuffer(dlite.gl.FLOAT, 4, destinationColors)
+
+  const renderVertexArray = dlite.createVertexArray()
+    .vertexAttributeBuffer(0, dlite.createVertexBuffer(dlite.gl.FLOAT, 2, new Float32Array(arcInterpolations)))
+    .instanceAttributeBuffer(1, originsBuffer)
+    .instanceAttributeBuffer(2, destinationsBuffer)
+    .instanceAttributeBuffer(3, originColorsBuffer)
+    .instanceAttributeBuffer(4, destinationColorsBuffer)
+
+  const renderPoints = dlite({
+    vertexArray: renderVertexArray,
+    vs: `#version 300 es
+    precision highp float;
+    layout(location=0) in vec2 arcPosition;
+    layout(location=1) in vec3 iOrigin;
+    layout(location=2) in vec3 iDestination;
+    layout(location=3) in vec4 iOriginColor;
+    layout(location=4) in vec4 iDestinationColor;
+
+    uniform float arcHeight;
+
+    out vec4 vColor;
+    out float vHeight;
+
+    void main() {
+      if (iOriginColor.a < 0.001 && iDestinationColor.a < 0.001) {
+        gl_Position = vec4(0);
+        vColor = vec4(0);
+        vHeight = 0.0;
+        return;
+      }
+
+      vec4 worldOrigin = project_position(vec4(iOrigin, 0));
+      vec4 worldDestination = project_position(vec4(iDestination, 0));
+      float worldDist = distance(worldOrigin.xy, worldDestination.xy);
+      float meters = 1.0 / project_size(1.0 / worldDist);
+      vHeight = arcPosition.y * arcHeight * meters / 2.0;
+      vec3 position = mix(iOrigin, iDestination, arcPosition.x);
+      position.z += vHeight;
+
+      gl_Position = project_position_to_clipspace(position);
+
+      vColor = mix(iOriginColor, iDestinationColor, arcPosition.x);
+    }`,
+
+    fs: `#version 300 es
+    precision highp float;
+    in vec4 vColor;
+    in float vHeight;
+    out vec4 fragColor;
+    void main() {
+      if (vHeight < 0.001 || vColor.a < 0.001) {
+        discard;
+      }
+      fragColor = vColor;
+    }`,
+    uniforms: {
+      arcHeight: arcHeight
+    },
+    count: arcResolution,
+    primitive: dlite.gl.LINE_LOOP,
+    blend: {
+      csrc: dlite.gl.SRC_ALPHA,
+      asrc: dlite.gl.SRC_ALPHA,
+      cdest: dlite.gl.ONE,
+      adest: dlite.gl.ONE
+    }
+  })
+
+  return { render, getBuffers, setBuffers }
+
+  function getBuffers () {
+    return {
+      origins: originsBuffer,
+      destinations: destinationsBuffer,
+      originColors: originColorsBuffer,
+      destinationColors: destinationColorsBuffer
+    }
+  }
+
+  function setBuffers ({ origins, destinations, originColors, destinationColors }) {
+    if (origins) {
+      originsBuffer = origins
+      renderVertexArray.instanceAttributeBuffer(1, originsBuffer)
+    }
+    if (destinations) {
+      destinationsBuffer = destinations
+      renderVertexArray.instanceAttributeBuffer(2, destinationsBuffer)
+    }
+    if (originColors) {
+      originColorsBuffer = originColors
+      renderVertexArray.instanceAttributeBuffer(3, originColorsBuffer)
+    }
+    if (destinationColors) {
+      destinationColorsBuffer = destinationColors
+      renderVertexArray.instanceAttributeBuffer(4, destinationColorsBuffer)
+    }
+  }
+
+  function render ({ arcHeight, buffers, count, timer }) {
+    const renderOpts = {}
+    if (arcHeight !== undefined) renderOpts.uniforms = { arcHeight: arcHeight }
+    if (count !== undefined) renderOpts.instanceCount = count
+    if (timer !== undefined) renderOpts.timer = timer
+    if (buffers !== undefined) setBuffers(buffers)
+    return renderPoints(renderOpts)
+  }
+}
+
+// TODO: Shouldn't depend on dlite?
 function createGPUSpring (dlite, size, data, stiffness, damping) {
   const SIZE_TO_TYPE = {
     1: 'float',
@@ -338,7 +388,6 @@ function createGPUSpring (dlite, size, data, stiffness, damping) {
     dlite.createVertexBuffer(dlite.gl.FLOAT, size, data, dlite.gl.DYNAMIC_DRAW),
     dlite.createVertexBuffer(dlite.gl.FLOAT, size, data, dlite.gl.DYNAMIC_DRAW)
   )
-  let destinationBuffer = bufferCycle.getCurrent()
 
   const springStateVertexArray = dlite.createVertexArray()
 
@@ -372,14 +421,12 @@ function createGPUSpring (dlite, size, data, stiffness, damping) {
     count: count
   })
 
-  return { tick, setDestination, getCurrentValue }
-  function setDestination (buffer) {
-    destinationBuffer = buffer
-  }
+  return { tick, getCurrentValue }
+
   function getCurrentValue () {
     return bufferCycle.getCurrent()
   }
-  function tick (s, d, c, useTimer) {
+  function tick (destinationBuffer, s, d, c, useTimer) {
     springStateVertexArray
       .vertexAttributeBuffer(0, bufferCycle.getPrevious())
       .vertexAttributeBuffer(1, bufferCycle.getCurrent())
