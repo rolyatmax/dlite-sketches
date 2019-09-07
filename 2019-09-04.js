@@ -1,7 +1,7 @@
 /* global fetch */
 
 const { GUI } = require('dat.gui')
-const createDlite = require('./dlite/dlite-0.0.5')
+const { createDlite } = require('./dlite/dlite-0.0.6')
 const createLoopToggle = require('./helpers/create-loop')
 const { createSpring } = require('spring-animator')
 
@@ -58,7 +58,7 @@ Promise.all([
   gui.add(settings, 'isRoaming')
   gui.add({ setNewCameraPosition }, 'setNewCameraPosition')
 
-  const cameraAnimator = createCameraAnimator(dlite.mapbox, 0.002, 0.22)
+  const cameraAnimator = createMapboxCameraAnimator(dlite.mapbox, 0.002, 0.22)
 
   const heightSpring = createSpring(0.01, 0.2, 0)
 
@@ -373,8 +373,8 @@ function createArcRenderer (dlite, {
   }
 }
 
-// TODO: Shouldn't depend on dlite?
-function createGPUSpring (dlite, size, data, stiffness, damping) {
+// accepts a rico instance or a dlite instance
+function createGPUSpring (rico, size, data, stiffness, damping) {
   const SIZE_TO_TYPE = {
     1: 'float',
     2: 'vec2',
@@ -384,14 +384,14 @@ function createGPUSpring (dlite, size, data, stiffness, damping) {
   const type = SIZE_TO_TYPE[size]
   const count = data.length / size
   const bufferCycle = createCycler(
-    dlite.createVertexBuffer(dlite.gl.FLOAT, size, data, dlite.gl.DYNAMIC_DRAW),
-    dlite.createVertexBuffer(dlite.gl.FLOAT, size, data, dlite.gl.DYNAMIC_DRAW),
-    dlite.createVertexBuffer(dlite.gl.FLOAT, size, data, dlite.gl.DYNAMIC_DRAW)
+    rico.createVertexBuffer(rico.gl.FLOAT, size, data, rico.gl.DYNAMIC_DRAW),
+    rico.createVertexBuffer(rico.gl.FLOAT, size, data, rico.gl.DYNAMIC_DRAW),
+    rico.createVertexBuffer(rico.gl.FLOAT, size, data, rico.gl.DYNAMIC_DRAW)
   )
 
-  const springStateVertexArray = dlite.createVertexArray()
+  const springStateVertexArray = rico.createVertexArray()
 
-  const updateSpringState = dlite({
+  const updateSpringState = rico({
     vs: `#version 300 es
     precision highp float;
     layout(location=0) in ${type} prevValue;
@@ -458,7 +458,7 @@ function createCycler (first, second, third) {
   }
 }
 
-function createCameraAnimator (mapbox, stiffness, damping) {
+function createMapboxCameraAnimator (mapbox, stiffness, damping) {
   const { center, zoom, bearing, pitch } = getValues()
 
   const centerSpring = createSpring(stiffness, damping, center)
