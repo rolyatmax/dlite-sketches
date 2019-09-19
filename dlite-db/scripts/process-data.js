@@ -42,11 +42,10 @@ const transforms = require(transformPath)
 // FIXME: how to handle headerless CSVs
 // FIXME: how to handle other types of delimiters
 let columnNames = null
-const rowValues = []
 
 const outSchema = transforms.map(t => ({
   name: t.name,
-  dataType: null,
+  dataType: t.dataType,
   stats: { counts: {} } // stats for all data types have counts
 }))
 
@@ -58,37 +57,38 @@ rl.on('line', (input) => {
   if (!input) return
   const row = createObject(columnNames, parseRows(input)[0])
   const values = transforms.map((t, i) => {
-    const { value, dataType } = getDataTypeAndValue(row, t)
-    outSchema[i].dataType = outSchema[i].dataType || dataType
-    if (outSchema[i].dataType && dataType && outSchema[i].dataType !== dataType) {
-      throw new Error(`values returned for ${t.name} are of different data types: ${outSchema[i].dataType} and ${dataType}`)
+    const value = t.value(row)
+    const dataType = getDataType(value)
+    if (dataType && outSchema[i].dataType !== dataType) {
+      throw new Error(`value returned for ${t.name} is of dataType ${dataType}, not the expected dataType ${outSchema[i].dataType}, given in the transform definition`)
     }
     updateStats(value, i)
     return value
   })
-  rowValues.push(values)
+  const floats = convertValuesToFloats(values, outSchema)
+  process.stdout.write(Buffer.from(floats.buffer))
 })
 
 rl.on('close', () => {
   finishStats(outSchema)
   fs.writeFileSync(outSchemaPath, JSON.stringify(outSchema))
-  let j = 0
-  while (rowValues.length) {
-    const vals = rowValues.shift()
-    // console.log(vals)
-    const floats = convertValuesToFloats(vals, outSchema)
-    // console.log(floats)
-    console.log(j++)
-    const buf = Buffer.from(floats.buffer)
+  // let j = 0
+  // while (rowValues.length) {
+  //   const vals = rowValues.shift()
+  //   // console.log(vals)
+  //   const floats = convertValuesToFloats(vals, outSchema)
+  //   // console.log(floats)
+  //   console.log(j++)
+  //   const buf = Buffer.from(floats.buffer)
 
-    for (let k = 0; k < floats.length; k++) {
-      const f = new Float32Array([floats[k]])
-      console.log(f)
-      process.stdout.write(Buffer.from(f.buffer))
-    }
-    // WHY DOES THIS LINE IN PARTICULAR SEEM TO FREEZE THE STDOUT.WRITE?
-    // process.stdout.write(buf)
-  }
+  //   for (let k = 0; k < floats.length; k++) {
+  //     const f = new Float32Array([floats[k]])
+  //     console.log(f)
+  //     process.stdout.write(Buffer.from(f.buffer))
+  //   }
+  //   // WHY DOES THIS LINE IN PARTICULAR SEEM TO FREEZE THE STDOUT.WRITE?
+  //   // process.stdout.write(buf)
+  // }
 })
 
 function convertValuesToFloats (values, outSchema) {
@@ -110,25 +110,22 @@ function convertValuesToFloats (values, outSchema) {
   return new Float32Array(out)
 }
 
-function getDataTypeAndValue (row, t) {
-  const val = t.value(row)
-  const out = { dataType: null, value: val }
-  if (val === null) return out
-  if (typeof val === 'boolean') out.dataType = 'boolean'
-  if (typeof val === 'string') out.dataType = 'string'
+function getDataType (val) {
+  if (val === null) return null
+  if (typeof val === 'boolean') return 'boolean'
+  if (typeof val === 'string') return 'string'
   if (Array.isArray(val)) {
     if (val.length > 4 || val.length < 2 || val.some(v => !Number.isFinite(v))) {
-      throw new Error(`Array returned for ${t.name} must be 2, 3, or 4 number values. Received: ${JSON.stringify(val)}`)
+      throw new Error(`Array returned must be 2, 3, or 4 number values. Received: ${JSON.stringify(val)}`)
     }
-    out.dataType = `vec${val.length}`
+    return `vec${val.length}`
   }
   if (typeof val === 'number') {
-    if (!Number.isFinite(val)) throw new Error(`Number returned for ${t.name} is not finite. Received: ${JSON.stringify(val)}`)
-    out.dataType = 'float'
+    if (!Number.isFinite(val)) throw new Error(`Number returned is not finite. Received: ${JSON.stringify(val)}`)
+    return 'float'
   }
-  if (val instanceof Date) out.dataType = 'datetime'
-  if (!out.dataType) throw new Error(`Unable to determine data type for ${t.name}. Received value: ${JSON.stringify(val)} for row: ${JSON.stringify(row)}`)
-  return out
+  if (val instanceof Date) return 'datetime'
+  throw new Error(`Unable to determine data type. Received value: ${JSON.stringify(val)}`)
 }
 
 // const samples = []
