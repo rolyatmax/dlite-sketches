@@ -25,6 +25,21 @@ if (!argv.transform || !argv.outSchema || argv.h || argv.help) {
   process.exit()
 }
 
+// Transform definitions are meant to look like this:
+//
+// [
+//   {
+//     name: 'location',
+//     dataType: 'vec2',
+//     value: (row) => [parseFloat(row.longitude), parseFloat(row.latitude)]
+//   },
+//   {
+//     name: 'timestamp',
+//     dataType: 'datetime',
+//     value: (row) => new Date(row.timestamp)
+//   }
+// ]
+
 const transformPath = path.join(process.cwd(), argv.transform)
 const outSchemaPath = path.join(process.cwd(), argv.outSchema)
 
