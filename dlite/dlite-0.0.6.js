@@ -509,6 +509,7 @@ function createRico (container = document.body) {
   rico.canvas = ricoCanvas
   rico.createVertexArray = picoApp.createVertexArray.bind(picoApp) // ??? merge other pico fns with the rico object?
   rico.createVertexBuffer = picoApp.createVertexBuffer.bind(picoApp) // ??? merge other pico fns with the rico object?
+  rico.createInterleavedBuffer = picoApp.createInterleavedBuffer.bind(picoApp) // ??? merge other pico fns with the rico object?
   rico.PicoGL = PicoGL
   rico.clear = function clear (...color) {
     picoApp.clearColor(...color)

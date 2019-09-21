@@ -20,7 +20,7 @@ if (!argv.transform || !argv.outSchema || argv.h || argv.help) {
   console.log('    definitions file must be a JS file that exports an array. See the source of this script for more')
   console.log('    information.) This script writes binary data to stdout and writes a JSON schema to OUT_SCHEMA_PATH.')
   console.log()
-  console.log('  Example: cat my-data.csv | node process-data.js --transform my-data-transform.js --outSchema schema-to-write.json --delimiter="|" > my-data.binary')
+  console.log('  Example: cat my-data.csv | node process-data.js --transform my-data-transform.js --outSchema schema-to-write.json --delimiter tab > my-data.binary')
   console.log()
   process.exit()
 }
@@ -86,24 +86,7 @@ rl.on('line', (input) => {
 
 rl.on('close', () => {
   finishStats(outSchema)
-  fs.writeFileSync(outSchemaPath, JSON.stringify(outSchema))
-  // let j = 0
-  // while (rowValues.length) {
-  //   const vals = rowValues.shift()
-  //   // console.log(vals)
-  //   const floats = convertValuesToFloats(vals, outSchema)
-  //   // console.log(floats)
-  //   console.log(j++)
-  //   const buf = Buffer.from(floats.buffer)
-
-  //   for (let k = 0; k < floats.length; k++) {
-  //     const f = new Float32Array([floats[k]])
-  //     console.log(f)
-  //     process.stdout.write(Buffer.from(f.buffer))
-  //   }
-  //   // WHY DOES THIS LINE IN PARTICULAR SEEM TO FREEZE THE STDOUT.WRITE?
-  //   // process.stdout.write(buf)
-  // }
+  fs.writeFileSync(outSchemaPath, JSON.stringify(outSchema, null, 2))
 })
 
 function convertValuesToFloats (values, outSchema) {
@@ -112,7 +95,20 @@ function convertValuesToFloats (values, outSchema) {
     const value = values[i]
     const column = outSchema[i]
     if (value === null) {
-      out.push(Number.MAX_VALUE)
+      switch (column.dataType) {
+        case 'vec2':
+          out.push(Number.MAX_VALUE, Number.MAX_VALUE)
+          break
+        case 'vec3':
+          out.push(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE)
+          break
+        case 'vec4':
+          out.push(Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE)
+          break
+        default:
+          out.push(Number.MAX_VALUE)
+          break
+      }
       continue
     }
     if (column.dataType === null) throw new Error(`dataType is null for ${column.name}. Perhaps all values returned were null.`)
