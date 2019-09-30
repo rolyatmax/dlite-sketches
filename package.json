@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "start": "budo 2019-09-21.js --live --open"
+    "start": "budo 2019-09-29.js --live --open"
   },
   "eslintConfig": {
     "extends": [
@@ -23,7 +23,8 @@
     "luxon": "^1.17.2",
     "mapbox-gl": "^1.2.0",
     "paralleljs": "^0.2.1",
-    "picogl": "^0.14.0",
+    "pico-mercator": "^0.4.1",
+    "picogl": "^0.15.0",
     "spring-animator": "^2.0.0",
     "standard": "^13.1.0",
     "worker-farm": "^1.7.0"
