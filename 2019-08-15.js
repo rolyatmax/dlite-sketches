@@ -7,7 +7,7 @@ const { createSpring } = require('spring-animator')
 
 const MAPBOX_TOKEN = require('./mapbox-token')
 
-const DATA_PATH = 'data/cabspotting-test.binary'
+const DATA_PATH = 'data/cabspotting.binary'
 
 const MAX_POINTS = 8000000
 
