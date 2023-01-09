@@ -20,7 +20,7 @@
     "gl-mat4": "^1.2.0",
     "gl-vec2": "^1.3.0",
     "gl-vec4": "^1.0.1",
-    "luxon": "^1.17.2",
+    "luxon": "^1.28.1",
     "mapbox-gl": "^1.2.0",
     "paralleljs": "^0.2.1",
     "pico-mercator": "^0.4.1",
